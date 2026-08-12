@@ -1,15 +1,20 @@
 package com.example.tvplayer
 
 import android.os.Bundle
+import android.view.View
 import android.widget.Button
-import androidx.appcompat.app.AlertDialog
+import android.widget.ProgressBar
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 class PlayerActivity : AppCompatActivity() {
 
@@ -18,6 +23,8 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private lateinit var playerView: PlayerView
+    private lateinit var overlayControls: View
+    private lateinit var bufferingIndicator: ProgressBar
     private var player: ExoPlayer? = null
 
     // نگهدارنده‌ی هر گزینه در دیالوگ انتخاب تراک
@@ -28,6 +35,15 @@ class PlayerActivity : AppCompatActivity() {
         setContentView(R.layout.activity_player)
 
         playerView = findViewById(R.id.playerView)
+        overlayControls = findViewById(R.id.overlayControls)
+        bufferingIndicator = findViewById(R.id.bufferingIndicator)
+
+        // دکمه‌های صدا/زیرنویس فقط همزمان با کنترل‌های خود پلیر نمایش داده می‌شوند
+        playerView.setControllerVisibilityListener(
+            PlayerView.ControllerVisibilityListener { visibility ->
+                overlayControls.visibility = visibility
+            }
+        )
 
         findViewById<Button>(R.id.btnAudioTrack).setOnClickListener {
             showTrackSelectionDialog(C.TRACK_TYPE_AUDIO, getString(R.string.btn_audio_track))
@@ -57,6 +73,21 @@ class PlayerActivity : AppCompatActivity() {
             .setSelectUndeterminedTextLanguage(true)
             .build()
 
+        exoPlayer.addListener(object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                bufferingIndicator.visibility =
+                    if (playbackState == Player.STATE_BUFFERING) View.VISIBLE else View.GONE
+            }
+
+            override fun onPlayerError(error: PlaybackException) {
+                Toast.makeText(
+                    this@PlayerActivity,
+                    "خطا در پخش ویدیو: ${error.message}",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        })
+
         exoPlayer.prepare()
         exoPlayer.playWhenReady = true
     }
@@ -84,7 +115,7 @@ class PlayerActivity : AppCompatActivity() {
 
         val labels = options.map { it.label }.toTypedArray()
 
-        AlertDialog.Builder(this)
+        MaterialAlertDialogBuilder(this)
             .setTitle(title)
             .setItems(labels) { dialog, which ->
                 val chosen = options[which]

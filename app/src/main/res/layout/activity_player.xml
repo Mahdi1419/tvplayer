@@ -9,28 +9,47 @@
         android:id="@+id/playerView"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        app:use_controller="true"
-        app:show_shuffle_button="false" />
+        app:show_shuffle_button="false"
+        app:use_controller="true" />
 
+    <ProgressBar
+        android:id="@+id/bufferingIndicator"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:visibility="gone" />
+
+    <!-- این دکمه‌ها فقط همراه با ظاهر شدن کنترل‌های پلیر نمایش داده می‌شوند -->
     <LinearLayout
+        android:id="@+id/overlayControls"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="top|end"
         android:orientation="horizontal"
-        android:padding="16dp">
+        android:padding="20dp"
+        android:visibility="gone">
 
-        <Button
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnAudioTrack"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginEnd="10dp"
+            android:backgroundTint="#66000000"
             android:text="@string/btn_audio_track"
-            android:layout_marginEnd="8dp" />
+            android:textColor="@color/text_primary"
+            app:strokeColor="@color/text_primary" />
 
-        <Button
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/btnSubtitleTrack"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/btn_subtitle_track" />
+            android:backgroundTint="#66000000"
+            android:text="@string/btn_subtitle_track"
+            android:textColor="@color/text_primary"
+            app:strokeColor="@color/text_primary" />
+
     </LinearLayout>
 
 </FrameLayout>

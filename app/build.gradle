@@ -35,6 +35,14 @@ android {
 dependencies {
     implementation 'androidx.core:core-ktx:1.13.1'
     implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'androidx.recyclerview:recyclerview:1.3.2'
+    implementation 'androidx.activity:activity-ktx:1.9.0'
+
+    // ظاهر و کامپوننت‌های حرفه‌ای‌تر UI (دکمه، کارت، دیالوگ)
+    implementation 'com.google.android.material:material:1.12.0'
+
+    // بارگذاری تامبنیل ویدیوهای محلی
+    implementation 'com.github.bumptech.glide:glide:4.16.0'
 
     // Media3 ExoPlayer - پخش ویدیو، تشخیص تراک صدا/زیرنویس داخل فایل
     implementation 'androidx.media3:media3-exoplayer:1.4.1'

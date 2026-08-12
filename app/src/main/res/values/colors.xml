@@ -1,7 +1,10 @@
 <resources>
-    <color name="bg_dark">#0D0D0D</color>
-    <color name="surface">#1A1A1A</color>
+    <color name="bg_dark">#0B0C10</color>
+    <color name="surface">#1B1D22</color>
+    <color name="surface_selected">#242731</color>
     <color name="accent">#3EA6FF</color>
+    <color name="accent_dim">#223EA6FF</color>
     <color name="text_primary">#FFFFFF</color>
-    <color name="text_secondary">#AAAAAA</color>
+    <color name="text_secondary">#9AA0AC</color>
+    <color name="badge_bg">#223EA6FF</color>
 </resources>

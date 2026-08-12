@@ -1,16 +1,25 @@
 package com.example.tvplayer
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.content.res.ColorStateList
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.widget.ArrayAdapter
-import android.widget.Button
+import android.view.View
 import android.widget.EditText
-import android.widget.ListView
+import android.widget.FrameLayout
 import android.widget.ProgressBar
 import android.widget.TextView
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
@@ -19,49 +28,128 @@ import java.net.URL
 class MainActivity : AppCompatActivity() {
 
     // ← آدرس پیش‌فرض فایل txt حاوی لینک‌های ویدیو را اینجا تنظیم کنید
-    private val defaultListUrl = "https://example.com/videos.txt"
+    private var listUrl = "https://example.com/videos.txt"
 
-    private lateinit var listView: ListView
-    private lateinit var edtListUrl: EditText
-    private lateinit var edtDirectUrl: EditText
-    private lateinit var progressBar: ProgressBar
+    private lateinit var recyclerView: RecyclerView
     private lateinit var txtStatus: TextView
-    private lateinit var adapter: ArrayAdapter<String>
+    private lateinit var txtEmpty: TextView
+    private lateinit var progressBar: ProgressBar
+    private lateinit var btnTabOnline: MaterialButton
+    private lateinit var btnTabLocal: MaterialButton
+    private lateinit var adapter: VideoAdapter
 
-    private val items = mutableListOf<VideoItem>()
+    private var onlineItems = listOf<VideoItem>()
+    private var localItems = listOf<VideoItem>()
+    private var currentTab = Tab.ONLINE
+
+    private enum class Tab { ONLINE, LOCAL }
+
+    private val requestPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            scanLocalVideos()
+        } else {
+            txtStatus.text = getString(R.string.permission_denied)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        listView = findViewById(R.id.listView)
-        edtListUrl = findViewById(R.id.edtListUrl)
-        edtDirectUrl = findViewById(R.id.edtDirectUrl)
-        progressBar = findViewById(R.id.progressBar)
+        recyclerView = findViewById(R.id.recyclerView)
         txtStatus = findViewById(R.id.txtStatus)
+        txtEmpty = findViewById(R.id.txtEmpty)
+        progressBar = findViewById(R.id.progressBar)
+        btnTabOnline = findViewById(R.id.btnTabOnline)
+        btnTabLocal = findViewById(R.id.btnTabLocal)
 
-        edtListUrl.setText(defaultListUrl)
+        adapter = VideoAdapter { item -> openPlayer(item.url) }
+        recyclerView.layoutManager = LinearLayoutManager(this)
+        recyclerView.adapter = adapter
 
-        adapter = ArrayAdapter(this, android.R.layout.simple_list_item_1, mutableListOf())
-        listView.adapter = adapter
+        btnTabOnline.setOnClickListener { switchTab(Tab.ONLINE) }
+        btnTabLocal.setOnClickListener { switchTab(Tab.LOCAL) }
 
-        listView.setOnItemClickListener { _, _, position, _ ->
-            openPlayer(items[position].url)
-        }
+        findViewById<MaterialButton>(R.id.btnSettings).setOnClickListener { showSettingsDialog() }
+        findViewById<MaterialButton>(R.id.btnAddLink).setOnClickListener { showAddLinkDialog() }
 
-        findViewById<Button>(R.id.btnLoadList).setOnClickListener {
-            val url = edtListUrl.text.toString().trim()
-            if (url.isNotEmpty()) loadListFromUrl(url)
-        }
-
-        findViewById<Button>(R.id.btnPlayDirect).setOnClickListener {
-            val url = edtDirectUrl.text.toString().trim()
-            if (url.isNotEmpty()) openPlayer(url)
-        }
-
-        // در شروع برنامه به صورت خودکار لیست پیش‌فرض بارگیری می‌شود
-        loadListFromUrl(defaultListUrl)
+        switchTab(Tab.ONLINE)
+        loadListFromUrl(listUrl)
     }
+
+    // ---------- تب‌ها ----------
+
+    private fun switchTab(tab: Tab) {
+        currentTab = tab
+        updateTabStyles()
+        renderCurrentTab()
+
+        if (tab == Tab.LOCAL && localItems.isEmpty()) {
+            ensurePermissionAndScan()
+        }
+    }
+
+    private fun updateTabStyles() {
+        val selectedBg = ContextCompat.getColor(this, R.color.accent)
+        val unselectedBg = ContextCompat.getColor(this, R.color.surface)
+        val selectedText = ContextCompat.getColor(this, R.color.text_primary)
+        val unselectedText = ContextCompat.getColor(this, R.color.text_secondary)
+
+        val onlineSelected = currentTab == Tab.ONLINE
+        btnTabOnline.backgroundTintList =
+            ColorStateList.valueOf(if (onlineSelected) selectedBg else unselectedBg)
+        btnTabOnline.setTextColor(if (onlineSelected) selectedText else unselectedText)
+
+        val localSelected = currentTab == Tab.LOCAL
+        btnTabLocal.backgroundTintList =
+            ColorStateList.valueOf(if (localSelected) selectedBg else unselectedBg)
+        btnTabLocal.setTextColor(if (localSelected) selectedText else unselectedText)
+    }
+
+    private fun renderCurrentTab() {
+        val list = if (currentTab == Tab.ONLINE) onlineItems else localItems
+        adapter.submitList(list)
+
+        val isEmpty = list.isEmpty()
+        txtEmpty.visibility = if (isEmpty) View.VISIBLE else View.GONE
+        recyclerView.visibility = if (isEmpty) View.GONE else View.VISIBLE
+        txtEmpty.text = if (currentTab == Tab.ONLINE)
+            getString(R.string.empty_online) else getString(R.string.empty_local)
+    }
+
+    // ---------- ویدیوهای محلی ----------
+
+    private fun ensurePermissionAndScan() {
+        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+            Manifest.permission.READ_MEDIA_VIDEO
+        else
+            Manifest.permission.READ_EXTERNAL_STORAGE
+
+        if (ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED) {
+            scanLocalVideos()
+        } else {
+            requestPermissionLauncher.launch(permission)
+        }
+    }
+
+    private fun scanLocalVideos() {
+        progressBar.visibility = View.VISIBLE
+        txtStatus.text = "در حال جستجوی ویدیوهای دستگاه..."
+
+        Thread {
+            val result = LocalVideoScanner.scan(this)
+            Handler(Looper.getMainLooper()).post {
+                localItems = result
+                progressBar.visibility = View.GONE
+                txtStatus.text = "${result.size} ویدیو روی دستگاه پیدا شد"
+                if (currentTab == Tab.LOCAL) renderCurrentTab()
+            }
+        }.start()
+    }
+
+    // ---------- لیست آنلاین ----------
 
     private fun openPlayer(url: String) {
         val intent = Intent(this, PlayerActivity::class.java)
@@ -70,7 +158,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadListFromUrl(urlString: String) {
-        progressBar.visibility = ProgressBar.VISIBLE
+        progressBar.visibility = View.VISIBLE
         txtStatus.text = "در حال دریافت لیست..."
 
         Thread {
@@ -78,20 +166,17 @@ class MainActivity : AppCompatActivity() {
                 val text = downloadText(urlString)
                 val parsed = parseVideoList(text)
                 Handler(Looper.getMainLooper()).post {
-                    items.clear()
-                    items.addAll(parsed)
-                    adapter.clear()
-                    adapter.addAll(parsed.map { it.title })
-                    adapter.notifyDataSetChanged()
-                    progressBar.visibility = ProgressBar.GONE
+                    onlineItems = parsed
+                    progressBar.visibility = View.GONE
                     txtStatus.text = if (parsed.isEmpty())
                         "لینکی در فایل پیدا نشد"
                     else
                         "${parsed.size} لینک بارگیری شد"
+                    if (currentTab == Tab.ONLINE) renderCurrentTab()
                 }
             } catch (e: Exception) {
                 Handler(Looper.getMainLooper()).post {
-                    progressBar.visibility = ProgressBar.GONE
+                    progressBar.visibility = View.GONE
                     txtStatus.text = "خطا در دریافت لیست: ${e.message}"
                 }
             }
@@ -141,4 +226,58 @@ class MainActivity : AppCompatActivity() {
         }
         return result
     }
+
+    // ---------- دیالوگ‌ها ----------
+
+    private fun showSettingsDialog() {
+        val input = EditText(this)
+        input.setText(listUrl)
+        input.hint = getString(R.string.hint_list_url)
+        input.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
+        input.setHintTextColor(ContextCompat.getColor(this, R.color.text_secondary))
+
+        val container = FrameLayout(this)
+        val padding = dp(20)
+        container.setPadding(padding, padding, padding, 0)
+        container.addView(input)
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.settings_title))
+            .setView(container)
+            .setPositiveButton(getString(R.string.btn_load_list)) { dialog, _ ->
+                val newUrl = input.text.toString().trim()
+                if (newUrl.isNotEmpty()) {
+                    listUrl = newUrl
+                    loadListFromUrl(newUrl)
+                }
+                dialog.dismiss()
+            }
+            .setNegativeButton(getString(R.string.btn_cancel), null)
+            .show()
+    }
+
+    private fun showAddLinkDialog() {
+        val input = EditText(this)
+        input.hint = getString(R.string.hint_direct_url)
+        input.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
+        input.setHintTextColor(ContextCompat.getColor(this, R.color.text_secondary))
+
+        val container = FrameLayout(this)
+        val padding = dp(20)
+        container.setPadding(padding, padding, padding, 0)
+        container.addView(input)
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.btn_add_link))
+            .setView(container)
+            .setPositiveButton(getString(R.string.btn_play_direct)) { dialog, _ ->
+                val url = input.text.toString().trim()
+                if (url.isNotEmpty()) openPlayer(url)
+                dialog.dismiss()
+            }
+            .setNegativeButton(getString(R.string.btn_cancel), null)
+            .show()
+    }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 }

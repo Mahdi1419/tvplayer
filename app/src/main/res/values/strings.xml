@@ -1,11 +1,28 @@
 <resources>
     <string name="app_name">TV Player</string>
+
+    <string name="tab_online">لیست آنلاین</string>
+    <string name="tab_local">ویدیوهای دستگاه</string>
+
+    <string name="btn_add_link">افزودن لینک</string>
+    <string name="btn_settings">تنظیمات</string>
+    <string name="btn_load_list">بارگیری</string>
+    <string name="btn_play_direct">پخش</string>
+    <string name="btn_cancel">انصراف</string>
+
     <string name="hint_list_url">آدرس فایل txt لیست ویدیوها</string>
-    <string name="hint_direct_url">لینک مستقیم ویدیو برای پخش</string>
-    <string name="btn_load_list">بارگیری لیست</string>
-    <string name="btn_play_direct">پخش لینک</string>
+    <string name="hint_direct_url">لینک مستقیم ویدیو</string>
+    <string name="settings_title">آدرس لیست ویدیوها</string>
+
+    <string name="empty_online">هنوز لینکی بارگیری نشده. از دکمه‌ی «تنظیمات» آدرس فایل txt را وارد کنید.</string>
+    <string name="empty_local">ویدیویی روی دستگاه پیدا نشد.</string>
+    <string name="permission_denied">برای نمایش ویدیوهای دستگاه، دسترسی لازم است.</string>
+
     <string name="btn_audio_track">صدا</string>
     <string name="btn_subtitle_track">زیرنویس</string>
     <string name="auto_default">خودکار / پیش‌فرض پلیر</string>
     <string name="no_track_found">موردی یافت نشد</string>
+
+    <string name="badge_online">آنلاین</string>
+    <string name="badge_local">دستگاه</string>
 </resources>
