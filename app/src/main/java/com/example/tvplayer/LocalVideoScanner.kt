@@ -2,18 +2,25 @@ package com.example.tvplayer
 
 import android.content.ContentUris
 import android.content.Context
+import android.os.Build
 import android.provider.MediaStore
 
 /**
- * جستجوی ویدیوهای موجود روی دستگاه از طریق MediaStore
- * (بدون نیاز به دسترسی مستقیم به فایل‌سیستم)
+ * Finds videos from all MediaStore external volumes, including removable/USB
+ * storage when Android has indexed that storage.
  */
 object LocalVideoScanner {
 
     fun scan(context: Context): List<VideoItem> {
         val result = mutableListOf<VideoItem>()
+        val seen = HashSet<String>()
 
-        val collection = MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+        val volumes = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            MediaStore.getExternalVolumeNames(context)
+        } else {
+            setOf("external")
+        }
+
         val projection = arrayOf(
             MediaStore.Video.Media._ID,
             MediaStore.Video.Media.DISPLAY_NAME,
@@ -21,25 +28,54 @@ object LocalVideoScanner {
         )
         val sortOrder = "${MediaStore.Video.Media.DATE_ADDED} DESC"
 
-        context.contentResolver.query(collection, projection, null, null, sortOrder)?.use { cursor ->
-            val idCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
-            val nameCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME)
-            val durationCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DURATION)
+        for (volume in volumes) {
+            val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                MediaStore.Video.Media.getContentUri(volume)
+            } else {
+                MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+            }
 
-            while (cursor.moveToNext()) {
-                val id = cursor.getLong(idCol)
-                val name = cursor.getString(nameCol) ?: "ویدیو بدون نام"
-                val duration = cursor.getLong(durationCol)
-                val contentUri = ContentUris.withAppendedId(collection, id)
+            try {
+                context.contentResolver.query(
+                    collection,
+                    projection,
+                    null,
+                    null,
+                    sortOrder
+                )?.use { cursor ->
+                    val idCol = cursor.getColumnIndex(MediaStore.Video.Media._ID)
+                    val nameCol = cursor.getColumnIndex(MediaStore.Video.Media.DISPLAY_NAME)
+                    val durationCol = cursor.getColumnIndex(MediaStore.Video.Media.DURATION)
 
-                result.add(
-                    VideoItem(
-                        title = name,
-                        url = contentUri.toString(),
-                        isLocal = true,
-                        durationMs = duration
-                    )
-                )
+                    if (idCol < 0 || nameCol < 0) return@use
+
+                    while (cursor.moveToNext()) {
+                        val id = cursor.getLong(idCol)
+                        val uri = ContentUris.withAppendedId(collection, id)
+                        val uriString = uri.toString()
+                        if (!seen.add(uriString)) continue
+
+                        val name = cursor.getString(nameCol).orEmpty().ifEmpty { "ویدیو بدون نام" }
+                        val duration = if (durationCol >= 0 && !cursor.isNull(durationCol)) {
+                            cursor.getLong(durationCol)
+                        } else {
+                            0L
+                        }
+
+                        result.add(
+                            VideoItem(
+                                title = name,
+                                url = uriString,
+                                isLocal = true,
+                                durationMs = duration
+                            )
+                        )
+                    }
+                }
+            } catch (_: SecurityException) {
+                // A volume can disappear or become unavailable while scanning.
+            } catch (_: Exception) {
+                // Ignore a broken/unavailable volume and continue with the others.
             }
         }
 

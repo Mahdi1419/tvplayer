@@ -3,6 +3,7 @@ package com.example.tvplayer
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.pm.ActivityInfo
 import android.content.res.ColorStateList
 import android.os.Build
 import android.os.Bundle
@@ -20,15 +21,13 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import java.io.BufferedReader
-import java.io.InputStreamReader
-import java.net.HttpURLConnection
-import java.net.URL
+import okhttp3.OkHttpClient
+import okhttp3.Request
 
 class MainActivity : AppCompatActivity() {
 
     // ← آدرس پیش‌فرض فایل txt حاوی لینک‌های ویدیو را اینجا تنظیم کنید
-    private var listUrl = "https://example.com/videos.txt"
+    private var listUrl = "https://cafeneti.com/mlinks.txt"
 
     private lateinit var recyclerView: RecyclerView
     private lateinit var txtStatus: TextView
@@ -37,6 +36,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnTabOnline: MaterialButton
     private lateinit var btnTabLocal: MaterialButton
     private lateinit var adapter: VideoAdapter
+    private lateinit var httpClient: OkHttpClient
 
     private var onlineItems = listOf<VideoItem>()
     private var localItems = listOf<VideoItem>()
@@ -57,6 +57,15 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        // TV stays landscape; phones may rotate freely, including portrait.
+        requestedOrientation = if (NetworkClient.isTv(this)) {
+            ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        } else {
+            ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+
+        httpClient = NetworkClient.create(this)
 
         recyclerView = findViewById(R.id.recyclerView)
         txtStatus = findViewById(R.id.txtStatus)
@@ -184,26 +193,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun downloadText(urlString: String): String {
-        val url = URL(urlString)
-        val conn = url.openConnection() as HttpURLConnection
-        conn.connectTimeout = 15000
-        conn.readTimeout = 15000
-        conn.requestMethod = "GET"
-        conn.connect()
+        val request = Request.Builder()
+            .url(urlString)
+            .get()
+            .build()
 
-        if (conn.responseCode !in 200..299) {
-            throw Exception("HTTP ${conn.responseCode}")
+        httpClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                throw Exception("HTTP ${response.code}")
+            }
+            return response.body?.string() ?: ""
         }
-
-        val reader = BufferedReader(InputStreamReader(conn.inputStream, Charsets.UTF_8))
-        val sb = StringBuilder()
-        var line: String?
-        while (reader.readLine().also { line = it } != null) {
-            sb.append(line).append('\n')
-        }
-        reader.close()
-        conn.disconnect()
-        return sb.toString()
     }
 
     // هر خط از فایل txt می‌تواند یکی از این دو شکل باشد:

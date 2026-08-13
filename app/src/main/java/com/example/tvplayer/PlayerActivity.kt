@@ -1,5 +1,6 @@
 package com.example.tvplayer
 
+import android.content.pm.ActivityInfo
 import android.os.Bundle
 import android.view.View
 import android.widget.Button
@@ -12,7 +13,11 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.PlayerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
@@ -27,18 +32,26 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var bufferingIndicator: ProgressBar
     private var player: ExoPlayer? = null
 
-    // نگهدارنده‌ی هر گزینه در دیالوگ انتخاب تراک
-    private data class TrackOption(val label: String, val group: Tracks.Group?, val trackIndex: Int)
+    private data class TrackOption(
+        val label: String,
+        val group: Tracks.Group?,
+        val trackIndex: Int
+    )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_player)
 
+        // Android TV is always landscape; phones can use portrait/landscape.
+        requestedOrientation = if (NetworkClient.isTv(this))
+            ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        else
+            ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+
         playerView = findViewById(R.id.playerView)
         overlayControls = findViewById(R.id.overlayControls)
         bufferingIndicator = findViewById(R.id.bufferingIndicator)
 
-        // دکمه‌های صدا/زیرنویس فقط همزمان با کنترل‌های خود پلیر نمایش داده می‌شوند
         playerView.setControllerVisibilityListener(
             PlayerView.ControllerVisibilityListener { visibility ->
                 overlayControls.visibility = visibility
@@ -53,21 +66,31 @@ class PlayerActivity : AppCompatActivity() {
         }
 
         val url = intent.getStringExtra(EXTRA_URL)
-        if (url.isNullOrEmpty()) {
+        if (url.isNullOrBlank()) {
             finish()
             return
         }
+
         initPlayer(url)
     }
 
     private fun initPlayer(url: String) {
-        val exoPlayer = ExoPlayer.Builder(this).build()
+        val okHttpClient = NetworkClient.create(this)
+        val okHttpDataSourceFactory = OkHttpDataSource.Factory(okHttpClient)
+        val dataSourceFactory = DefaultDataSource.Factory(this, okHttpDataSourceFactory)
+        val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
+
+        val renderersFactory = DefaultRenderersFactory(this)
+            .setEnableDecoderFallback(true)
+
+        val exoPlayer = ExoPlayer.Builder(this, renderersFactory)
+            .setMediaSourceFactory(mediaSourceFactory)
+            .build()
+
         player = exoPlayer
         playerView.player = exoPlayer
 
         exoPlayer.setMediaItem(MediaItem.fromUri(url))
-
-        // ترجیح انتخاب خودکار زیرنویس در صورت وجود در فایل
         exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
             .buildUpon()
             .setSelectUndeterminedTextLanguage(true)
@@ -80,9 +103,10 @@ class PlayerActivity : AppCompatActivity() {
             }
 
             override fun onPlayerError(error: PlaybackException) {
+                bufferingIndicator.visibility = View.GONE
                 Toast.makeText(
                     this@PlayerActivity,
-                    "خطا در پخش ویدیو: ${error.message}",
+                    "خطا در پخش ویدیو: ${error.errorCodeName}\n${error.message.orEmpty()}",
                     Toast.LENGTH_LONG
                 ).show()
             }
@@ -94,7 +118,7 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun showTrackSelectionDialog(trackType: Int, title: String) {
         val exoPlayer = player ?: return
-        val tracks: Tracks = exoPlayer.currentTracks
+        val tracks = exoPlayer.currentTracks
 
         val options = mutableListOf<TrackOption>()
         options.add(TrackOption(getString(R.string.auto_default), null, -1))
@@ -103,9 +127,9 @@ class PlayerActivity : AppCompatActivity() {
             if (group.type != trackType) continue
             for (i in 0 until group.length) {
                 val format = group.getTrackFormat(i)
-                val lang = format.language ?: "?"
-                val name = if (!format.label.isNullOrEmpty()) format.label!! else lang
-                options.add(TrackOption("$name ($lang)", group, i))
+                val language = format.language ?: "?"
+                val label = format.label?.takeIf { it.isNotBlank() } ?: language
+                options.add(TrackOption("$label ($language)", group, i))
             }
         }
 
@@ -113,29 +137,29 @@ class PlayerActivity : AppCompatActivity() {
             options.add(TrackOption(getString(R.string.no_track_found), null, -2))
         }
 
-        val labels = options.map { it.label }.toTypedArray()
-
         MaterialAlertDialogBuilder(this)
             .setTitle(title)
-            .setItems(labels) { dialog, which ->
+            .setItems(options.map { it.label }.toTypedArray()) { dialog, which ->
                 val chosen = options[which]
                 when {
                     chosen.trackIndex == -1 -> {
-                        val params = exoPlayer.trackSelectionParameters.buildUpon()
-                            .clearOverridesOfType(trackType)
-                            .setTrackTypeDisabled(trackType, false)
-                            .build()
-                        exoPlayer.trackSelectionParameters = params
+                        exoPlayer.trackSelectionParameters =
+                            exoPlayer.trackSelectionParameters.buildUpon()
+                                .clearOverridesOfType(trackType)
+                                .setTrackTypeDisabled(trackType, false)
+                                .build()
                     }
                     chosen.trackIndex >= 0 && chosen.group != null -> {
-                        val override = TrackSelectionOverride(chosen.group.mediaTrackGroup, chosen.trackIndex)
-                        val params = exoPlayer.trackSelectionParameters.buildUpon()
-                            .setOverrideForType(override)
-                            .setTrackTypeDisabled(trackType, false)
-                            .build()
-                        exoPlayer.trackSelectionParameters = params
+                        val override = TrackSelectionOverride(
+                            chosen.group.mediaTrackGroup,
+                            chosen.trackIndex
+                        )
+                        exoPlayer.trackSelectionParameters =
+                            exoPlayer.trackSelectionParameters.buildUpon()
+                                .setOverrideForType(override)
+                                .setTrackTypeDisabled(trackType, false)
+                                .build()
                     }
-                    // chosen.trackIndex == -2 یعنی "موردی یافت نشد" -> کاری انجام نمی‌شود
                 }
                 dialog.dismiss()
             }
