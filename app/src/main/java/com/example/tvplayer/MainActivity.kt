@@ -198,7 +198,7 @@ class MainActivity : AppCompatActivity() {
     private fun loadPersistedUsbUris() {
         usbTreeUris.clear()
         contentResolver.persistedUriPermissions.forEach { permission ->
-            if ((permission.modeFlags and Intent.FLAG_GRANT_READ_URI_PERMISSION) != 0) {
+            if (permission.isReadPermission) {
                 usbTreeUris.add(permission.uri)
             }
         }
