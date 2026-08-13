@@ -73,15 +73,12 @@ class VideoAdapter(
 
             card.setOnClickListener { onClick(item) }
 
-            // افکت بزرگ‌نمایی و برجسته‌شدن هنگام فوکوس با ریموت
-            card.setOnFocusChangeListener { view, hasFocus ->
-                view.animate()
-                    .scaleX(if (hasFocus) 1.04f else 1f)
-                    .scaleY(if (hasFocus) 1.04f else 1f)
-                    .setDuration(150)
-                    .start()
+            // Lightweight TV focus state: no animations, only a clear focus ring.
+            card.isFocusable = true
+            card.isFocusableInTouchMode = true
+            card.setOnFocusChangeListener { _, hasFocus ->
                 card.strokeWidth = if (hasFocus) dp(itemView, 2) else 0
-                card.cardElevation = if (hasFocus) dp(itemView, 6).toFloat() else 0f
+                card.cardElevation = 0f
             }
         }
 

@@ -5,6 +5,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ActivityInfo
 import android.content.res.ColorStateList
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -26,8 +27,12 @@ import okhttp3.Request
 
 class MainActivity : AppCompatActivity() {
 
+    companion object {
+        private const val PREF_USB_TREE = "usb_tree_uri"
+    }
+
     // ← آدرس پیش‌فرض فایل txt حاوی لینک‌های ویدیو را اینجا تنظیم کنید
-    private var listUrl = "https://cafeneti.com/mlinks.txt"
+    private var listUrl = "https://example.com/videos.txt"
 
     private lateinit var recyclerView: RecyclerView
     private lateinit var txtStatus: TextView
@@ -52,6 +57,33 @@ class MainActivity : AppCompatActivity() {
         } else {
             txtStatus.text = getString(R.string.permission_denied)
         }
+    }
+
+    private var usbPickerShown = false
+
+    private val usbTreeLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { uri: Uri? ->
+        if (uri == null) {
+            txtStatus.text = getString(R.string.empty_local)
+            return@registerForActivityResult
+        }
+
+        try {
+            contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+            )
+        } catch (_: SecurityException) {
+            try {
+                contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            } catch (_: Exception) {
+                // Some TV file providers do not support persistable permissions.
+            }
+        }
+
+        getPreferences(MODE_PRIVATE).edit().putString(PREF_USB_TREE, uri.toString()).apply()
+        scanSelectedUsb(uri)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -153,6 +185,39 @@ class MainActivity : AppCompatActivity() {
                 localItems = result
                 progressBar.visibility = View.GONE
                 txtStatus.text = "${result.size} ویدیو روی دستگاه پیدا شد"
+                if (currentTab == Tab.LOCAL) renderCurrentTab()
+
+                // Some Android TV firmware does not expose USB media through MediaStore.
+                // Reuse a previously granted USB tree first, then ask once if needed.
+                if (result.isEmpty() && NetworkClient.isTv(this)) {
+                    val savedTree = getPreferences(MODE_PRIVATE).getString(PREF_USB_TREE, null)
+                    if (savedTree != null) {
+                        scanSelectedUsb(Uri.parse(savedTree))
+                    } else if (!usbPickerShown) {
+                        usbPickerShown = true
+                        Handler(Looper.getMainLooper()).postDelayed({
+                            txtStatus.text = "حافظه USB پیدا نشد؛ حافظه USB را انتخاب کنید"
+                            usbTreeLauncher.launch(null)
+                        }, 250)
+                    }
+                }
+            }
+        }.start()
+    }
+
+    private fun scanSelectedUsb(treeUri: Uri) {
+        progressBar.visibility = View.VISIBLE
+        txtStatus.text = "در حال اسکن حافظه USB..."
+
+        Thread {
+            val result = LocalVideoScanner.scanTree(this, treeUri)
+            Handler(Looper.getMainLooper()).post {
+                localItems = result
+                progressBar.visibility = View.GONE
+                txtStatus.text = if (result.isEmpty())
+                    "ویدیویی در حافظه انتخاب‌شده پیدا نشد"
+                else
+                    "${result.size} ویدیو پیدا شد"
                 if (currentTab == Tab.LOCAL) renderCurrentTab()
             }
         }.start()
