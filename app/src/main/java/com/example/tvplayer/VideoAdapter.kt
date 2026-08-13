@@ -73,12 +73,9 @@ class VideoAdapter(
 
             card.setOnClickListener { onClick(item) }
 
-            // Lightweight TV focus state: no animations, only a clear focus ring.
-            card.isFocusable = true
-            card.isFocusableInTouchMode = true
+            // Lightweight TV focus indicator: no animation or elevation changes.
             card.setOnFocusChangeListener { _, hasFocus ->
                 card.strokeWidth = if (hasFocus) dp(itemView, 2) else 0
-                card.cardElevation = 0f
             }
         }
 

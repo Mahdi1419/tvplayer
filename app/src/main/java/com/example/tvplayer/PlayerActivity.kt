@@ -50,9 +50,6 @@ class PlayerActivity : AppCompatActivity() {
             ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
 
         playerView = findViewById(R.id.playerView)
-        playerView.isFocusable = true
-        playerView.isFocusableInTouchMode = true
-        playerView.requestFocus()
         overlayControls = findViewById(R.id.overlayControls)
         bufferingIndicator = findViewById(R.id.bufferingIndicator)
 
@@ -93,6 +90,9 @@ class PlayerActivity : AppCompatActivity() {
 
         player = exoPlayer
         playerView.player = exoPlayer
+        playerView.isFocusable = true
+        playerView.isFocusableInTouchMode = true
+        playerView.requestFocus()
 
         exoPlayer.setMediaItem(MediaItem.fromUri(url))
         exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
@@ -118,7 +118,38 @@ class PlayerActivity : AppCompatActivity() {
 
         exoPlayer.prepare()
         exoPlayer.playWhenReady = true
-        playerView.showController()
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            val p = player
+            if (p != null) {
+                when (event.keyCode) {
+                    KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> {
+                        if (event.repeatCount == 0) { p.playWhenReady = !p.isPlaying }
+                        playerView.showController()
+                        return true
+                    }
+                    KeyEvent.KEYCODE_MEDIA_PLAY -> { p.play(); playerView.showController(); return true }
+                    KeyEvent.KEYCODE_MEDIA_PAUSE -> { p.pause(); playerView.showController(); return true }
+                    KeyEvent.KEYCODE_MEDIA_STOP -> {
+                        p.pause(); p.seekTo(0); playerView.showController(); return true
+                    }
+                    KeyEvent.KEYCODE_MEDIA_REWIND, KeyEvent.KEYCODE_DPAD_LEFT -> {
+                        if (event.repeatCount == 0) p.seekTo((p.currentPosition - 10_000L).coerceAtLeast(0L))
+                        playerView.showController(); return true
+                    }
+                    KeyEvent.KEYCODE_MEDIA_FAST_FORWARD, KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                        if (event.repeatCount == 0) p.seekTo((p.currentPosition + 10_000L).coerceAtMost(p.duration.takeIf { it > 0 } ?: Long.MAX_VALUE))
+                        playerView.showController(); return true
+                    }
+                    KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> {
+                        playerView.showController(); return true
+                    }
+                }
+            }
+        }
+        return super.dispatchKeyEvent(event)
     }
 
     private fun showTrackSelectionDialog(trackType: Int, title: String) {
@@ -169,53 +200,6 @@ class PlayerActivity : AppCompatActivity() {
                 dialog.dismiss()
             }
             .show()
-    }
-
-    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        if (event.action == KeyEvent.ACTION_DOWN) {
-            val exoPlayer = player
-            if (exoPlayer != null) {
-                when (event.keyCode) {
-                    KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_MEDIA_REWIND, KeyEvent.KEYCODE_MEDIA_PREVIOUS -> {
-                        exoPlayer.seekBack()
-                        playerView.showController()
-                        return true
-                    }
-                    KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_MEDIA_FAST_FORWARD, KeyEvent.KEYCODE_MEDIA_NEXT -> {
-                        exoPlayer.seekForward()
-                        playerView.showController()
-                        return true
-                    }
-                    KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER,
-                    KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
-                        if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
-                        playerView.showController()
-                        return true
-                    }
-                    KeyEvent.KEYCODE_MEDIA_PLAY -> {
-                        exoPlayer.play()
-                        playerView.showController()
-                        return true
-                    }
-                    KeyEvent.KEYCODE_MEDIA_PAUSE -> {
-                        exoPlayer.pause()
-                        playerView.showController()
-                        return true
-                    }
-                    KeyEvent.KEYCODE_MEDIA_STOP -> {
-                        exoPlayer.pause()
-                        exoPlayer.seekTo(0)
-                        playerView.showController()
-                        return true
-                    }
-                    KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> {
-                        playerView.showController()
-                        return true
-                    }
-                }
-            }
-        }
-        return super.dispatchKeyEvent(event)
     }
 
     override fun onStop() {

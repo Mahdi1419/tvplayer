@@ -25,4 +25,5 @@
 
     <string name="badge_online">آنلاین</string>
     <string name="badge_local">دستگاه</string>
+    <string name="btn_usb">انتخاب USB</string>
 </resources>

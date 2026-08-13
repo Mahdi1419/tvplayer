@@ -90,3 +90,9 @@ https://example.com/video1.mp4
 - افزودن remember آخرین آدرس list url با `SharedPreferences`.
 - افزودن قابلیت جست‌وجو/فیلتر در لیست ویدیوها.
 - افزودن پشتیبانی از زیرنویس خارجی (`.srt`/`.vtt`) در صورت نیاز، از طریق `MediaItem.SubtitleConfiguration`.
+
+## Build notes
+- `assembleDebug` creates the installable debug APK.
+- `assembleRelease` creates an optimized, R8/minified release APK. The GitHub workflow uploads it as `app-release-unsigned.apk` because no private signing key is stored in the repository.
+- On Android TV firmware that does not expose USB media through MediaStore, the app uses the system document picker to grant persistent read access to the USB folder and then scans it recursively.
+- TV player remote keys are handled explicitly for play/pause, stop, rewind/fast-forward and D-pad seeking.
